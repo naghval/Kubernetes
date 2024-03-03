@@ -1,8 +1,10 @@
-+++++++++++++++++++++++++++++++++++++++++++
-+K8s Connected singleMasterNode by kubeadm+
-+++++++++++++++++++++++++++++++++++++++++++
-reference	->https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
-
+++++++++++++++++++++++++++++++++++++++++++++
++K8s Connected Single MasterNode by kubeadm+
++v1.29.x                                   +
++Feb24                                     +
+++++++++++++++++++++++++++++++++++++++++++++
+reference->https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+----------------
 Before you begin
 ----------------
 -NODE		A compatible Linux host
@@ -58,17 +60,18 @@ root@master1:~# reboot
 
 verification
 ------------
-try access to masterNode through ssh from outside
+try access to master1.example.com with SSH from outside................
 
-Now clone masterNode and create 3workerNodes, reconfig.
-workerNodes
+Now clone master1.example.com and create 3workerNodes
+Reconfig worker1,2 and 3
+----------------------------
+Login to worker1.example.edu
 u: root
 p: devops
 root@worker1:~# hostnamectl set-hostname worker1.example.edu
 root@worker1:~# hostname
 worker1.example.edu
 root@worker1:~# cat /etc/netplan/00-installer-config.yaml
-# This is the network config written by 'subiquity'
 network:
   version: 2
   renderer: networkd
@@ -89,7 +92,9 @@ root@worker1:~# cat /etc/hosts
 192.168.0.192   worker1.example.edu     worker1
 192.168.0.193   worker2.example.edu     worker2
 192.168.0.194   worker3.example.edu     worker3
-+++++++++++++++++++++++++++++++++++++++++++++++
+
+Same procedure for worker2.example.edu and worker3.example.edu
+--------------------------------------------------------------
 -------------------------------------------
 Run commands on whole nodes mastres/workers
 -------------------------------------------
@@ -118,10 +123,10 @@ root@master1:~# sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-c
 Installing Container Runtime Interface (CRI)
 --------------------------------------------
 You will install these packages on all of your machines:
-containerd
-CRI-O
-Docker Engine
-Mirantis Container Runtime
+-containerd
+-CRI-O
+-Docker Engine
+-Mirantis Container Runtime
 
 1. containerd 
 https://github.com/containerd/containerd/blob/main/docs/getting-started.md
@@ -202,7 +207,6 @@ root@master1:~# mkdir -p /opt/cni/bin
 root@master1:~# tar Cxzvf /opt/cni/bin cni-plugins-linux-amd64-v1.4.0.tgz
 root@master1:~# ls /opt/cni/bin/
 bandwidth  bridge  dhcp  dummy  firewall  host-device  host-local  ipvlan  loopback  macvlan  portmap  ptp  sbr  static  tap  tuning  vlan  vrf
-
 root@master1:~# sudo systemctl restart containerd
 
 2. CRI-O 
@@ -234,6 +238,7 @@ root@master1:~# curl -L https://download.opensuse.org/repositories/devel:/kubic:
 root@master1:~# curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/1.24/xUbuntu_22.04/Release.key | gpg --dearmor -o /usr/share/keyrings/libcontainers-crio-archive-keyring.gpg
 root@master1:~# apt-get update
 root@master1:~# apt-get install cri-o cri-o-runc -y
+
 root@master1:~# sudo systemctl daemon-reload
 root@master1:~# sudo systemctl enable crio
 root@master1:~# sudo systemctl start crio
@@ -270,9 +275,10 @@ root@master1:~# systemctl daemon-reload
 root@master1:~# systemctl enable --now cri-docker.service
 root@master1:~# systemctl enable --now cri-docker.socket
 root@master1:~# systemctl status cri-docker.service
-+++++++++++++++++++++++++++++++++++++++++++++++++++
-Installing kubeadm, kubelet and kubectl 
-You will install these packages on all of your machines:
+---------------------------------------------------
+Installing kubeadm, kubelet and kubectl
+---------------------------------------
+You will install these packages on all of your machines master/workers:
 	-kubeadm: the command to bootstrap the cluster.
 	-kubelet: the component that runs on all of the machines in your cluster and does things like starting pods and containers.
 	-kubectl: the command line util to talk to your cluster.
@@ -283,33 +289,27 @@ root@master1:~# echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gp
 root@master1:~# apt-get update
 root@master1:~# apt-get install kubelet kubeadm kubectl -y
 root@master1:~# apt-mark hold kubelet kubeadm kubectl
-+++++++++++++++++++++++++++++++++++++++++++++++++++++
+-----------------------------------------------------
 Creating a cluster with kubeadm
 https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
----------------------------------------------------------------------------------------------
-NOTE:	Just on masterNode
-	In this deployment seletced runtime is 'containerd'
+-------------------------------
+You will do the procedure just on masterNode
+Note: In this deployment seletced runtime is 'containerd'
 
 root@master1:~# hostname -i
 192.168.0.191
 root@master1:~# free -m
 Swap:              0           0           0
-root@master1:~# kubeadm init --apiserver-advertise-address=192.168.0.191
-Found multiple CRI endpoints on the host. Please define which one do you wish to use by setting the 'criSocket' field in the kubeadm configuration file: unix:///var/run/containerd/containerd.sock, unix:///var/run/crio/crio.sock, unix:///var/run/cri-dockerd.sock
-To see the stack trace of this error execute with --v=5 or higher
 root@master1:~# rm -rf /etc/containerd/config.toml
 root@master1:~# systemctl restart containerd.service
 root@master1:~# kubeadm init --apiserver-advertise-address=192.168.0.191 --cri-socket=/var/run/containerd/containerd.sock --v=5
 Your Kubernetes control-plane has initialized successfully!
-
 To start using your cluster, you need to run the following as a regular user:
-
   mkdir -p $HOME/.kube
   sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
   sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 Alternatively, if you are the root user, you can run:
-
   export KUBECONFIG=/etc/kubernetes/admin.conf
 
 You should now deploy a pod network to the cluster.
@@ -317,7 +317,6 @@ Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
   https://kubernetes.io/docs/concepts/cluster-administration/addons/
 
 Then you can join any number of worker nodes by running the following on each as root:
-
   kubeadm join 192.168.0.191:6443 --token 1ywih8.w5aiv7c7z93mnw4t --discovery-token-ca-cert-hash sha256:5fba2ac342af860cefa14cd19ba865d88b9dd315d48fe360ffca76989058c89e
 
 root@master1:~# mkdir -p $HOME/.kube
@@ -388,10 +387,13 @@ kube-system   kube-proxy-n6vdj                              1/1     Running   7 
 kube-system   kube-proxy-rt56d                              1/1     Running   6 (22s ago)     9m13s
 kube-system   kube-scheduler-master1.example.edu            1/1     Running   7 (5m24s ago)   18m
 ------------------------------------------------
-Have Good Time
-Conatct me:
-		mnaghval@redhat.com
-		ali@prodevans.com
-		naghval@yahoo.com
- Mohammad Ali Naghval
-        Feb24
+Have Fun :)
+Mohammad Ali Naghval
+Redhat Technical Consultant
+Prodevans Technical Consultant
+contact:
+-mnaghval@redhat.com
+-ali@prodevans.com
+-naghval@yahoo.com
+
+Feb24
