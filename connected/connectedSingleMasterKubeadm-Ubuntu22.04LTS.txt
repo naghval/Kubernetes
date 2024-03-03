@@ -8,25 +8,19 @@ Before you begin
 -NODE		A compatible Linux host
   masterNodes 	->1Master
   workerNodes 	->3Workers
-
 -OS
   ubuntu 22.04LTS
-
 -MEMORY
   memory 	->2GB or more of RAM per machine
-
 -CPU
   master 	->2CPUs or more
   workr  	->1CPUs or more
-
 -Domain		->example.edu
-
 -Hostname/IP:
 		master1.example.edu	192.168.0.191
 		worker1.example.edu	192.168.0.192
 		worker2.example.edu	192.168.0.193
 		worker3.example.edu	192.168.0.194
-
 -------------
 Prepare Nodes
 -------------
@@ -399,6 +393,5 @@ Conatct me:
 		mnaghval@redhat.com
 		ali@prodevans.com
 		naghval@yahoo.com
-
  Mohammad Ali Naghval
         Feb24
