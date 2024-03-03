@@ -1,0 +1,404 @@
++++++++++++++++++++++++++++++++++++++++++++
++K8s Connected singleMasterNode by kubeadm+
++++++++++++++++++++++++++++++++++++++++++++
+reference	->https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+
+Before you begin
+----------------
+-NODE		A compatible Linux host
+  masterNodes 	->1Master
+  workerNodes 	->3Workers
+
+-OS
+  ubuntu 22.04LTS
+
+-MEMORY
+  memory 	->2GB or more of RAM per machine
+
+-CPU
+  master 	->2CPUs or more
+  workr  	->1CPUs or more
+
+-Domain		->example.edu
+
+-Hostname/IP:
+		master1.example.edu	192.168.0.191
+		worker1.example.edu	192.168.0.192
+		worker2.example.edu	192.168.0.193
+		worker3.example.edu	192.168.0.194
+
+-------------
+Prepare Nodes
+-------------
+masterNode:
+-provision masterNode vm through ubuntu 22.04LTS
+-login to masterNode vm
+u: devops
+p: devops
+devops@master1:~$ sudo -i
+password: devops
+root@master1:~# passwd
+new-password: devops
+retype_new password: devops
+root@master1:~# hostnamectl set-hostname master1.example.edu
+root@master1:~# vim /etc/netplan/00-installer-config.yaml
+# This is the network config written by 'subiquity'
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    ens160:
+      dhcp4: false
+      addresses: [192.168.0.191/24]
+      routes:
+        - to: default
+          via: 192.168.0.1
+      nameservers:
+        addresses: [192.168.0.1,8.8.8.8,8.8.4.4]
+:wq!
+root@master1:~# netplan apply
+root@master1:~# vim /etc/ssh/sshd_config
+ 34 PermitRootLogin yes
+:wq!
+root@master1:~# reboot
+
+verification
+------------
+try access to masterNode through ssh from outside
+
+Now clone masterNode and create 3workerNodes, reconfig.
+workerNodes
+u: root
+p: devops
+root@worker1:~# hostnamectl set-hostname worker1.example.edu
+root@worker1:~# hostname
+worker1.example.edu
+root@worker1:~# cat /etc/netplan/00-installer-config.yaml
+# This is the network config written by 'subiquity'
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    ens160:
+      dhcp4: false
+      addresses: [192.168.0.192/24]
+      routes:
+        - to: default
+          via: 192.168.0.1
+      nameservers:
+        addresses: [192.168.0.1,8.8.8.8,8.8.4.4]
+root@worker1:~# vim /etc/ssh/sshd_config | grep -i permit
+ 34 PermitRootLogin yes
+:wq!
+root@worker1:~# cat /etc/hosts
+192.168.0.191   master1.example.edu     master1
+192.168.0.192   worker1.example.edu     worker1
+192.168.0.193   worker2.example.edu     worker2
+192.168.0.194   worker3.example.edu     worker3
++++++++++++++++++++++++++++++++++++++++++++++++
+-------------------------------------------
+Run commands on whole nodes mastres/workers
+-------------------------------------------
+root@master1:~# cat /sys/class/dmi/id/product_uuid
+bb350542-40a8-7be9-0b6e-6d40a6aabab1
+root@master1:~# free -m
+               total        used        free      shared  buff/cache   available
+Mem:            7949         237        7415           1         295        7474
+Swap:              0           0           0
+root@master1:~# cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+root@master1:~# modprobe overlay
+root@master1:~# modprobe br_netfilter
+root@master1:~# cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+root@master1:~# sysctl --system
+root@master1:~# lsmod | grep br_netfilter
+root@master1:~# lsmod | grep overlay
+root@master1:~# sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables net.ipv4.ip_forward
+--------------------------------------------
+Installing Container Runtime Interface (CRI)
+--------------------------------------------
+You will install these packages on all of your machines:
+containerd
+CRI-O
+Docker Engine
+Mirantis Container Runtime
+
+1. containerd 
+https://github.com/containerd/containerd/blob/main/docs/getting-started.md
+https://github.com/containerd/containerd/releases
+https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
+https://github.com/opencontainers/runc/releases
+https://github.com/containernetworking/plugins/releases
+
+Option1: from the official binaries
+Step1:
+-Installing containerd
+root@master1:~# wget https://github.com/containerd/containerd/releases/download/v1.7.13/containerd-1.7.13-linux-amd64.tar.gz
+root@master1:~# ls
+containerd-1.7.13-linux-amd64.tar.gz  snap
+root@master1:~# tar Cxzvf /usr/local containerd-1.7.13-linux-amd64.tar.gz
+-systemd
+root@master1:~# mkdir -p /usr/local/lib/systemd/system/
+root@master1:~# vim /usr/local/lib/systemd/system/containerd.service
+# Copyright The containerd Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[Unit]
+Description=containerd container runtime
+Documentation=https://containerd.io
+After=network.target local-fs.target
+
+[Service]
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart=/usr/local/bin/containerd
+
+Type=notify
+Delegate=yes
+KillMode=process
+Restart=always
+RestartSec=5
+
+# Having non-zero Limit*s causes performance problems due to accounting overhead
+# in the kernel. We recommend using cgroups to do container-local accounting.
+LimitNPROC=infinity
+LimitCORE=infinity
+
+# Comment TasksMax if your systemd version does not supports it.
+# Only systemd 226 and above support this version.
+TasksMax=infinity
+OOMScoreAdjust=-999
+
+[Install]
+WantedBy=multi-user.target
+:wq!
+root@master1:~# systemctl daemon-reload
+root@master1:~# systemctl enable --now containerd
+root@master1:~# systemctl status containerd.service
+
+Step2:
+-Installing runc
+root@master1:~# wget https://github.com/opencontainers/runc/releases/download/v1.1.12/runc.amd64
+root@master1:~# ls
+containerd-1.7.13-linux-amd64.tar.gz  runc.amd64  snap
+root@master1:~# install -m 755 runc.amd64 /usr/local/sbin/runc
+
+Step3:
+-Installing CNI plugins
+root@master1:~# wget https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+root@master1:~# ls
+cni-plugins-linux-amd64-v1.4.0.tgz  containerd-1.7.13-linux-amd64.tar.gz  runc.amd64  snap
+root@master1:~# mkdir -p /opt/cni/bin
+root@master1:~# tar Cxzvf /opt/cni/bin cni-plugins-linux-amd64-v1.4.0.tgz
+root@master1:~# ls /opt/cni/bin/
+bandwidth  bridge  dhcp  dummy  firewall  host-device  host-local  ipvlan  loopback  macvlan  portmap  ptp  sbr  static  tap  tuning  vlan  vrf
+
+root@master1:~# sudo systemctl restart containerd
+
+2. CRI-O 
+https://github.com/cri-o/cri-o/blob/main/install.md#readme
+CRI-O Installation Instructions
+APT based operating systems
+root@master1:~# cat /etc/os-release
+PRETTY_NAME="Ubuntu 22.04.2 LTS"
+
+$OS	->xUbuntu_22.04
+$VERSION->1.24
+--------------
+Before
+------
+echo "deb [signed-by=/usr/share/keyrings/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
+echo "deb [signed-by=/usr/share/keyrings/libcontainers-crio-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$VERSION/$OS/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.list
+mkdir -p /usr/share/keyrings
+curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/Release.key | gpg --dearmor -o /usr/share/keyrings/libcontainers-archive-keyring.gpg
+curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$VERSION/$OS/Release.key | gpg --dearmor -o /usr/share/keyrings/libcontainers-crio-archive-keyring.gpg
+apt-get update
+apt-get install cri-o cri-o-runc
+--------------------------------
+After
+-----
+root@master1:~# echo "deb [signed-by=/usr/share/keyrings/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
+root@master1:~# echo "deb [signed-by=/usr/share/keyrings/libcontainers-crio-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/1.24/xUbuntu_22.04/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:1.24.list
+root@master1:~# mkdir -p /usr/share/keyrings
+root@master1:~# curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/Release.key | gpg --dearmor -o /usr/share/keyrings/libcontainers-archive-keyring.gpg
+root@master1:~# curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/1.24/xUbuntu_22.04/Release.key | gpg --dearmor -o /usr/share/keyrings/libcontainers-crio-archive-keyring.gpg
+root@master1:~# apt-get update
+root@master1:~# apt-get install cri-o cri-o-runc -y
+root@master1:~# sudo systemctl daemon-reload
+root@master1:~# sudo systemctl enable crio
+root@master1:~# sudo systemctl start crio
+root@master1:~# systemctl status crio.service
+
+3. Docker Engine 
+https://docs.docker.com/engine/install/ubuntu/
+Install using the apt repository
+root@master1:~# apt-get update
+root@worker1:~# dpkg --configure -a
+or
+root@worker1:~# apt install -f
+root@master1:~# apt-get install ca-certificates curl -y
+root@master1:~# install -m 0755 -d /etc/apt/keyrings
+root@master1:~# curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+root@master1:~# chmod a+r /etc/apt/keyrings/docker.asc
+root@master1:~# echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+root@master1:~# apt-get update
+root@master1:~# apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+root@master1:~# docker version
+root@master1:~# systemctl status docker.service
+
+4. Mirantis Container Runtime
+https://www.mirantis.com/blog/how-to-install-cri-dockerd-and-migrate-nodes-from-dockershim/
+root@master1:~# wget https://github.com/Mirantis/cri-dockerd/releases/download/v0.2.0/cri-dockerd-v0.2.0-linux-amd64.tar.gz
+root@master1:~# tar xvf cri-dockerd-v0.2.0-linux-amd64.tar.gz
+root@master1:~# mv ./cri-dockerd /usr/local/bin/
+root@master1:~# wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.service
+root@master1:~# wget https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.socket
+root@master1:~# ls
+root@master1:~# mv cri-docker.socket cri-docker.service /etc/systemd/system/
+root@master1:~# sed -i -e 's,/usr/bin/cri-dockerd,/usr/local/bin/cri-dockerd,' /etc/systemd/system/cri-docker.service
+root@master1:~# systemctl daemon-reload
+root@master1:~# systemctl enable --now cri-docker.service
+root@master1:~# systemctl enable --now cri-docker.socket
+root@master1:~# systemctl status cri-docker.service
++++++++++++++++++++++++++++++++++++++++++++++++++++
+Installing kubeadm, kubelet and kubectl 
+You will install these packages on all of your machines:
+	-kubeadm: the command to bootstrap the cluster.
+	-kubelet: the component that runs on all of the machines in your cluster and does things like starting pods and containers.
+	-kubectl: the command line util to talk to your cluster.
+root@master1:~# apt-get update
+root@master1:~# apt-get install -y apt-transport-https ca-certificates curl gpg -y
+root@master1:~# curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+root@master1:~# echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+root@master1:~# apt-get update
+root@master1:~# apt-get install kubelet kubeadm kubectl -y
+root@master1:~# apt-mark hold kubelet kubeadm kubectl
++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Creating a cluster with kubeadm
+https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
+---------------------------------------------------------------------------------------------
+NOTE:	Just on masterNode
+	In this deployment seletced runtime is 'containerd'
+
+root@master1:~# hostname -i
+192.168.0.191
+root@master1:~# free -m
+Swap:              0           0           0
+root@master1:~# kubeadm init --apiserver-advertise-address=192.168.0.191
+Found multiple CRI endpoints on the host. Please define which one do you wish to use by setting the 'criSocket' field in the kubeadm configuration file: unix:///var/run/containerd/containerd.sock, unix:///var/run/crio/crio.sock, unix:///var/run/cri-dockerd.sock
+To see the stack trace of this error execute with --v=5 or higher
+root@master1:~# rm -rf /etc/containerd/config.toml
+root@master1:~# systemctl restart containerd.service
+root@master1:~# kubeadm init --apiserver-advertise-address=192.168.0.191 --cri-socket=/var/run/containerd/containerd.sock --v=5
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+  kubeadm join 192.168.0.191:6443 --token 1ywih8.w5aiv7c7z93mnw4t --discovery-token-ca-cert-hash sha256:5fba2ac342af860cefa14cd19ba865d88b9dd315d48fe360ffca76989058c89e
+
+root@master1:~# mkdir -p $HOME/.kube
+root@master1:~# ls -a
+.kube 
+root@master1:~# sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+root@master1:~# ls -a .kube/
+.  ..  config
+root@master1:~# sudo chown $(id -u):$(id -g) $HOME/.kube/config
+root@master1:~# ls -l .kube/config
+-rw------- 1 root root 5657 Feb 24 07:29 .kube/config
+root@master1:~# export KUBECONFIG=/etc/kubernetes/admin.conf
+root@master1:~# kubectl get nodes
+NAME                  STATUS   ROLES           AGE     VERSION
+master1.example.edu   Ready    control-plane   4m18s   v1.29.2
+root@master1:~# kubectl  get pods -A
+NAMESPACE     NAME                                          READY   STATUS             RESTARTS        AGE
+kube-system   coredns-76f75df574-6jwh4                      0/1     CrashLoopBackOff   1 (7s ago)      3m41s
+kube-system   coredns-76f75df574-9xh4j                      0/1     CrashLoopBackOff   2 (9s ago)      3m41s
+kube-system   etcd-master1.example.edu                      1/1     Running            1 (4m40s ago)   4m
+kube-system   kube-apiserver-master1.example.edu            1/1     Running            3 (98s ago)     4m3s
+kube-system   kube-controller-manager-master1.example.edu   1/1     Running            2 (2m35s ago)   4m3s
+kube-system   kube-proxy-6dvgw                              1/1     Running            3 (45s ago)     3m42s
+kube-system   kube-scheduler-master1.example.edu            1/1     Running            3 (2m5s ago)    4m44s
+
+Now, join workers into the cluster
+-worker1
+root@worker1:~# free -m
+Swap:              0           0           0
+root@worker1:~# rm -rf /etc/containerd/config.toml
+root@worker1:~# systemctl restart containerd.service
+root@worker1:~# kubeadm join 192.168.0.191:6443 --token 1ywih8.w5aiv7c7z93mnw4t --discovery-token-ca-cert-hash sha256:5fba2ac342af860cefa14cd19ba865d88b9dd315d48fe360ffca76989058c89e --cri-socket=/var/run/containerd/containerd.sock --v=5
+
+-worker2
+root@worker1:~# free -m
+Swap:              0           0           0
+root@worker1:~# rm -rf /etc/containerd/config.toml
+root@worker1:~# systemctl restart containerd.service
+root@worker1:~# kubeadm join 192.168.0.191:6443 --token 1ywih8.w5aiv7c7z93mnw4t --discovery-token-ca-cert-hash sha256:5fba2ac342af860cefa14cd19ba865d88b9dd315d48fe360ffca76989058c89e --cri-socket=/var/run/containerd/containerd.sock --v=5
+
+-worker3
+root@worker1:~# free -m
+Swap:              0           0           0
+root@worker1:~# rm -rf /etc/containerd/config.toml
+root@worker1:~# systemctl restart containerd.service
+root@worker1:~# kubeadm join 192.168.0.191:6443 --token 1ywih8.w5aiv7c7z93mnw4t --discovery-token-ca-cert-hash sha256:5fba2ac342af860cefa14cd19ba865d88b9dd315d48fe360ffca76989058c89e --cri-socket=/var/run/containerd/containerd.sock --v=5
+
+Now, check on masterNode
+root@master1:~# kubectl completion bash >>~/.bashrc
+root@master1:~# kubeadm completion bash >>~/.bashrc
+root@master1:~# source ~/.bashrc
+root@master1:~# kubectl get nodes
+NAME                  STATUS   ROLES           AGE     VERSION
+master1.example.edu   Ready    control-plane   18m     v1.29.2
+worker1.example.edu   Ready    <none>          10m     v1.29.2
+worker2.example.edu   Ready    <none>          9m31s   v1.29.2
+worker3.example.edu   Ready    <none>          9m6s    v1.29.2
+root@master1:~# kubectl get pods -A
+NAMESPACE     NAME                                          READY   STATUS    RESTARTS        AGE
+kube-system   coredns-76f75df574-6jwh4                      1/1     Running   6 (2m9s ago)    17m
+kube-system   coredns-76f75df574-9xh4j                      1/1     Running   6 (57s ago)     17m
+kube-system   etcd-master1.example.edu                      1/1     Running   6 (3m5s ago)    18m
+kube-system   kube-apiserver-master1.example.edu            1/1     Running   6 (3m30s ago)   18m
+kube-system   kube-controller-manager-master1.example.edu   1/1     Running   5 (57s ago)     18m
+kube-system   kube-proxy-6dvgw                              1/1     Running   7 (3m58s ago)   17m
+kube-system   kube-proxy-kplw7                              1/1     Running   7 (18s ago)     9m38s
+kube-system   kube-proxy-n6vdj                              1/1     Running   7 (20s ago)     10m
+kube-system   kube-proxy-rt56d                              1/1     Running   6 (22s ago)     9m13s
+kube-system   kube-scheduler-master1.example.edu            1/1     Running   7 (5m24s ago)   18m
+------------------------------------------------
+Have Good Time
+Conatct me:
+		mnaghval@redhat.com
+		ali@prodevans.com
+		naghval@yahoo.com
+
+ Mohammad Ali Naghval
+        Feb24
