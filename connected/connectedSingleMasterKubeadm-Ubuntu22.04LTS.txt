@@ -1,36 +1,34 @@
 ++++++++++++++++++++++++++++++++++++++++++++
-+K8s Connected Single MasterNode by kubeadm+
-+v1.29.x                                   +
-+Feb24                                     +
++K8s-Connected-Single-MasterNode by kubeadm+
 ++++++++++++++++++++++++++++++++++++++++++++
-reference->https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+reference
+  https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 ----------------
 Before you begin
 ----------------
--NODE		A compatible Linux host
-  masterNodes 	->1Master
-  workerNodes 	->3Workers
--OS
-  ubuntu 22.04LTS
+-NODE's
+  1Master  Ubuntu 22.04LTS
+  3Workers Ubuntu 22.04LTS
 -MEMORY
-  memory 	->2GB or more of RAM per machine
+  4GB per-Node
 -CPU
-  master 	->2CPUs or more
-  workr  	->1CPUs or more
--Domain		->example.edu
+  2CPUs masterNodes
+  1CPUs workerNodes
+-Domain
+  example.edu
 -Hostname/IP:
-		master1.example.edu	192.168.0.191
-		worker1.example.edu	192.168.0.192
-		worker2.example.edu	192.168.0.193
-		worker3.example.edu	192.168.0.194
+  master1.example.edu	192.168.0.191
+  worker1.example.edu	192.168.0.192
+  worker2.example.edu	192.168.0.193
+  worker3.example.edu	192.168.0.194
 -------------
 Prepare Nodes
 -------------
-masterNode:
--provision masterNode vm through ubuntu 22.04LTS
--login to masterNode vm
-u: devops
-p: devops
+-masterNode-
+1. provision masterNode vm through ubuntu 22.04LTS
+2. login to masterNode vm
+u:devops
+p:devops
 devops@master1:~$ sudo -i
 password: devops
 root@master1:~# passwd
@@ -58,13 +56,14 @@ root@master1:~# vim /etc/ssh/sshd_config
 :wq!
 root@master1:~# reboot
 
-verification
-------------
-try access to master1.example.com with SSH from outside................
+-verification-
+--------------
+try access to master1.example.com with SSH from outside
+try access to internet through masterNode
 
-Now clone master1.example.com and create 3workerNodes
+Now, clone master1.example.com and create 3workerNodes
 Reconfig worker1,2 and 3
-----------------------------
+------------------------
 Login to worker1.example.edu
 u: root
 p: devops
@@ -95,9 +94,10 @@ root@worker1:~# cat /etc/hosts
 
 Same procedure for worker2.example.edu and worker3.example.edu
 --------------------------------------------------------------
--------------------------------------------
-Run commands on whole nodes mastres/workers
--------------------------------------------
+
+---------------------------------------------------
+Run bellow procedure on whole nodes mastres/workers
+---------------------------------------------------
 root@master1:~# cat /sys/class/dmi/id/product_uuid
 bb350542-40a8-7be9-0b6e-6d40a6aabab1
 root@master1:~# free -m
@@ -218,19 +218,7 @@ PRETTY_NAME="Ubuntu 22.04.2 LTS"
 
 $OS	->xUbuntu_22.04
 $VERSION->1.24
---------------
-Before
-------
-echo "deb [signed-by=/usr/share/keyrings/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
-echo "deb [signed-by=/usr/share/keyrings/libcontainers-crio-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$VERSION/$OS/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.list
-mkdir -p /usr/share/keyrings
-curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/Release.key | gpg --dearmor -o /usr/share/keyrings/libcontainers-archive-keyring.gpg
-curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$VERSION/$OS/Release.key | gpg --dearmor -o /usr/share/keyrings/libcontainers-crio-archive-keyring.gpg
-apt-get update
-apt-get install cri-o cri-o-runc
---------------------------------
-After
------
+
 root@master1:~# echo "deb [signed-by=/usr/share/keyrings/libcontainers-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
 root@master1:~# echo "deb [signed-by=/usr/share/keyrings/libcontainers-crio-archive-keyring.gpg] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/1.24/xUbuntu_22.04/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:1.24.list
 root@master1:~# mkdir -p /usr/share/keyrings
@@ -238,7 +226,6 @@ root@master1:~# curl -L https://download.opensuse.org/repositories/devel:/kubic:
 root@master1:~# curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/1.24/xUbuntu_22.04/Release.key | gpg --dearmor -o /usr/share/keyrings/libcontainers-crio-archive-keyring.gpg
 root@master1:~# apt-get update
 root@master1:~# apt-get install cri-o cri-o-runc -y
-
 root@master1:~# sudo systemctl daemon-reload
 root@master1:~# sudo systemctl enable crio
 root@master1:~# sudo systemctl start crio
@@ -292,8 +279,9 @@ root@master1:~# apt-mark hold kubelet kubeadm kubectl
 -----------------------------------------------------
 Creating a cluster with kubeadm
 https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
--------------------------------
+--------------------------------------------
 You will do the procedure just on masterNode
+
 Note: In this deployment seletced runtime is 'containerd'
 
 root@master1:~# hostname -i
@@ -387,13 +375,12 @@ kube-system   kube-proxy-n6vdj                              1/1     Running   7 
 kube-system   kube-proxy-rt56d                              1/1     Running   6 (22s ago)     9m13s
 kube-system   kube-scheduler-master1.example.edu            1/1     Running   7 (5m24s ago)   18m
 ---------------------------------------------------------------------------------------------------
-Mohammad Ali Naghval
+Mohammad Ali Naghval-Feb24
 Redhat Technical Consultant
-Prodevans Technical Consultant
-Contact Me:
--mail
-   mnaghval@redhat.com
-   ali@prodevans.com
-   naghval@yahoo.com
+Prodevans SR.Technical Consultant
+-email:
+  mnaghval@redhat.com
+  ali@prodevans.com
+  manent1900@gmail.com
 -linkedin
-   www.linkedin.com/in/mohammad-ali-naghval-7b778779
+  www.linkedin.com/in/mohammad-ali-naghval-7b778779
